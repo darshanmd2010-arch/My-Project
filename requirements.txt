@@ -1,0 +1,9 @@
+flask
+flask-sqlalchemy
+sqlalchemy<2.1
+numpy
+scipy
+scikit-learn
+xgboost
+lightgbm
+lime

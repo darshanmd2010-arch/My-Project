@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Higher Education Attainment Predictor{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+  <div class="app">
+    <aside class="side">
+      <b>Higher Education<br>Attainment Predictor</b>
+      <a href="/dashboard" class="{{ 'on' if active == 'dashboard' }}">Dashboard</a>
+      <a href="/upload" class="{{ 'on' if active == 'upload' }}">Upload Data</a>
+      <a href="/analysis" class="{{ 'on' if active == 'analysis' }}">Data Analysis</a>
+      <a href="/training" class="{{ 'on' if active == 'training' }}">Model Training</a>
+      <a href="/predict" class="{{ 'on' if active == 'predict' }}">Predict Student</a>
+      <a href="/interventions" class="{{ 'on' if active == 'interventions' }}">Interventions</a>
+    </aside>
+
+    <main class="main">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Upload Data{% endblock %}
+
+{% block content %}
+<h1>Upload Survey Data</h1>
+
+<form method="post" enctype="multipart/form-data" class="drop">
+  <b>Choose a CSV file</b>
+  <p>The file is checked, then saved to the SQL database. Students already saved are skipped.</p>
+  <input type="file" name="csv_file" accept=".csv" required>
+  <button class="btn" type="submit">Upload and save to database</button>
+</form>
+
+{% if result and result.ok %}
+<div class="card">
+  <b>Import result</b>
+  <table>
+    <tr><th>Rows read</th><td>{{ result.rows_total }}</td></tr>
+    <tr><th>Saved</th><td>{{ result.rows_saved }}</td></tr>
+    <tr><th>Duplicates skipped</th><td>{{ result.duplicates_skipped }}</td></tr>
+    <tr><th>Rows with errors</th><td>{{ result.errors|length }}</td></tr>
+    <tr><th>Unrecognised columns</th><td>{{ result.unknown_columns|join(', ') if result.unknown_columns else 'None' }}</td></tr>
+  </table>
+  {% for e in result.errors %}<p>{{ e }}</p>{% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <b>Students in database: {{ total_students }}</b>
+  <p>Preview (first 10 rows)</p>
+  <table>
+    <tr>
+      <th>Student_ID</th><th>Age</th><th>Gender</th><th>Department</th>
+      <th>GPA</th><th>Family income (INR)</th><th>Continues to HE</th>
+    </tr>
+    {% for s in preview %}
+    <tr>
+      <td>{{ s.student_id }}</td><td>{{ s.age }}</td><td>{{ s.gender }}</td>
+      <td>{{ s.department }}</td><td>{{ s.cumulative_gpa }}</td>
+      <td>{{ s.family_income_inr|int }}</td><td>{{ s.higher_education_continuation }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">No data yet. Upload a CSV file above.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <b>Recent uploads</b>
+  <table>
+    <tr><th>File</th><th>Rows read</th><th>Saved</th><th>Skipped</th><th>When (UTC)</th></tr>
+    {% for l in logs %}
+    <tr>
+      <td>{{ l.filename }}</td><td>{{ l.rows_total }}</td><td>{{ l.rows_saved }}</td>
+      <td>{{ l.rows_skipped }}</td><td>{{ l.uploaded_at.strftime('%d %b %Y %H:%M') }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No uploads yet.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}

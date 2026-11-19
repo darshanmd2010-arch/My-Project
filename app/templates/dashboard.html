@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+{% if total == 0 %}
+<div class="flash error">No data yet. Go to <b>Upload Data</b> and upload your CSV file.</div>
+{% else %}
+
+<div class="row">
+  <div class="card">
+    <p>Students in database</p>
+    <div class="k">{{ total }}</div>
+    <p class="note">{{ continuing_rate }}% continue to higher education</p>
+  </div>
+  <div class="card">
+    <p>Predicted at-risk</p>
+    <div class="k">{{ at_risk if at_risk else '—' }}</div>
+    <p class="note">{{ 'Chance of continuing below 50%' if at_risk else 'Click Generate on the Interventions page' }}</p>
+  </div>
+  <div class="card">
+    <p>Best model accuracy</p>
+    {% if best %}
+    <div class="k">{{ '%.1f'|format(best.accuracy * 100) }}%</div>
+    <p class="note">{{ best.model_name }} · ROC-AUC {{ '%.3f'|format(best.roc_auc) }} · baseline {{ '%.1f'|format(baseline * 100) }}%</p>
+    {% else %}
+    <div class="k">—</div>
+    <p class="note">Train the models first</p>
+    {% endif %}
+  </div>
+  <div class="card">
+    <p>Interventions</p>
+    <div class="k">{{ pending + done }}</div>
+    <p class="note">{{ pending }} pending · {{ done }} done</p>
+  </div>
+</div>
+
+{% if best and best.roc_auc < 0.60 %}
+<div class="flash error">
+  The model's ROC-AUC is {{ '%.3f'|format(best.roc_auc) }}, close to chance (0.50), so predictions
+  and the at-risk list are not reliable with this dataset.
+</div>
+{% endif %}
+
+<div class="row">
+  <div class="card">
+    <b>Attainment by family income band</b>
+    <p class="note">% of students who continue to higher education</p>
+    <div class="chart-box" style="height:300px"><canvas id="incomeChart"></canvas></div>
+  </div>
+  <div class="card">
+    <b>Interventions by barrier</b>
+    <p class="note">Number of recommendations created</p>
+    {% if barrier_values %}
+    <div class="chart-box" style="height:300px"><canvas id="barrierChart"></canvas></div>
+    {% else %}
+    <p>No recommendations yet. Open <b>Interventions</b> and click <b>Generate recommendations</b>.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <b>Highest-risk students</b>
+  <p class="note">Lowest predicted chance of continuing</p>
+  <table>
+    <tr><th>Student</th><th>Chance of continuing</th><th>Main barriers</th><th>Risk</th></tr>
+    {% for p in riskiest %}
+    <tr>
+      <td>{{ p.student_id }}</td>
+      <td>{{ '%.1f'|format(p.probability_continue * 100) }}%</td>
+      <td>{{ barriers_by_student.get(p.student_id, [])|join(', ') }}</td>
+      <td><span class="{{ 'tag' if p.risk_level == 'High' else 'ok' }}">{{ p.risk_level }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4">No at-risk students yet. Open <b>Interventions</b> and click <b>Generate recommendations</b>.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+const counts = {{ band_counts|tojson }};
+new Chart(document.getElementById("incomeChart"), {
+  type: "bar",
+  data: {
+    labels: {{ band_labels|tojson }},
+    datasets: [{ label: "% continuing", data: {{ band_rates|tojson }}, backgroundColor: "#2563EB" }]
+  },
+  options: {
+    maintainAspectRatio: false,
+    scales: { y: { beginAtZero: true, max: 100 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { afterLabel: (c) => "Students: " + counts[c.dataIndex] } }
+    }
+  }
+});
+
+{% if barrier_values %}
+new Chart(document.getElementById("barrierChart"), {
+  type: "bar",
+  data: {
+    labels: {{ barrier_labels|tojson }},
+    datasets: [{ label: "Recommendations", data: {{ barrier_values|tojson }}, backgroundColor: "#C2410C" }]
+  },
+  options: { maintainAspectRatio: false, plugins: { legend: { display: false } } }
+});
+{% endif %}
+</script>
+{% endif %}
+{% endblock %}

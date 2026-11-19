@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Model Training{% endblock %}
+
+{% block content %}
+<h1>Model Training</h1>
+
+<div class="row">
+  <div class="card">
+    <b>Settings</b>
+    <table>
+      <tr><th>Target</th><td>Higher_Education_Continuation</td></tr>
+      <tr><th>Students</th><td>{{ total }}</td></tr>
+      <tr><th>Test split</th><td>80% train / 20% test, stratified</td></tr>
+      <tr><th>Validation</th><td>5-fold stratified cross-validation</td></tr>
+      <tr><th>Outliers</th><td>IQR rule (1.5 × IQR), capped at the limits</td></tr>
+      <tr><th>Baseline accuracy</th><td>{{ '%.3f'|format(baseline) }} (always guess the majority)</td></tr>
+    </table>
+    <p class="note">
+      Models: XGBoost, LightGBM, HistGradientBoosting, Stacking Ensemble, DNN (MLP).
+      CatBoost and TensorFlow are replaced by HistGradientBoosting and an MLP network
+      because this PC's Windows policy blocks those libraries.
+    </p>
+    {% if total == 0 %}
+      <div class="flash error">No data yet. Upload a CSV file first.</div>
+    {% else %}
+      <button class="btn" id="trainBtn" type="button">Train models</button>
+      <p class="note" id="status"></p>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <b>Best model</b>
+    {% if best %}
+      <div class="k">{{ best.model_name }}</div>
+      <p>ROC-AUC {{ '%.3f'|format(best.roc_auc) }} · Accuracy {{ '%.3f'|format(best.accuracy) }}</p>
+      <p class="note">Last trained (UTC): {{ trained_at.strftime('%d %b %Y %H:%M') }}</p>
+    {% else %}
+      <p>No model trained yet. Click <b>Train models</b>.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% if weak %}
+<div class="flash error">
+  The best ROC-AUC is {{ '%.3f'|format(best.roc_auc) }}. A score near 0.50 means the model is
+  no better than guessing, so the input columns in this dataset do not predict the outcome.
+  Check the dataset before relying on these predictions.
+</div>
+{% endif %}
+
+<div class="card">
+  <b>Evaluation on the test set</b>
+  <table>
+    <tr>
+      <th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th>
+      <th>F1</th><th>ROC-AUC</th><th>Kappa</th><th>MCC</th><th></th>
+    </tr>
+    {% for r in results %}
+    <tr>
+      <td>{{ r.model_name }}</td>
+      <td>{{ '%.3f'|format(r.accuracy) }}</td>
+      <td>{{ '%.3f'|format(r.precision) }}</td>
+      <td>{{ '%.3f'|format(r.recall) }}</td>
+      <td>{{ '%.3f'|format(r.f1_score) }}</td>
+      <td>{{ '%.3f'|format(r.roc_auc) }}</td>
+      <td>{{ '%.3f'|format(r.cohen_kappa) }}</td>
+      <td>{{ '%.3f'|format(r.mcc) }}</td>
+      <td>{% if r.is_best %}<span class="ok">Best</span>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9">No results yet.</td></tr>
+    {% endfor %}
+  </table>
+  <p class="note">
+    How to read it: accuracy should be clearly above the baseline, ROC-AUC clearly above 0.50,
+    and Kappa and MCC clearly above 0. A model that always answers "Yes" gets Recall 1.000 but
+    Kappa and MCC of 0.
+  </p>
+</div>
+
+<div class="card">
+  <b>Stratified cross-validation ({{ folds if folds else 5 }} folds)</b>
+  <table>
+    <tr><th>Model</th><th>Accuracy (mean ± std)</th><th>ROC-AUC (mean ± std)</th></tr>
+    {% for r in results %}
+    {% set c = cv.get(r.model_name) %}
+    <tr>
+      <td>{{ r.model_name }}</td>
+      {% if c and not c.get('error') %}
+      <td>{{ '%.3f ± %.3f'|format(c.acc_mean, c.acc_std) }}</td>
+      <td>{{ '%.3f ± %.3f'|format(c.auc_mean, c.auc_std) }}</td>
+      {% else %}
+      <td colspan="2">Not available. Click Train models.</td>
+      {% endif %}
+    </tr>
+    {% else %}
+    <tr><td colspan="3">No results yet.</td></tr>
+    {% endfor %}
+  </table>
+  <p class="note">
+    The data is split into 5 parts. Each part is used once for testing while the other 4 are
+    used for training, and the scores are averaged. A small "±" means the result is stable.
+  </p>
+</div>
+
+<div class="card">
+  <b>Global factor importance (XGBoost TreeSHAP)</b>
+  <p class="note">
+    Average size of each factor's effect on the prediction over a sample of 500 students.
+    Longer bars mean the factor moves predictions more. The SHAP library is blocked on this PC,
+    so XGBoost's built-in TreeSHAP values are used.
+  </p>
+  <table>
+    {% for f in factors_global %}
+    <tr>
+      <td style="width:240px">{{ f.feature }}</td>
+      <td><div style="background:#2563EB;height:14px;border-radius:4px;width:{{ f.pct }}%;min-width:2px"></div></td>
+      <td style="width:80px">{{ f.value }}</td>
+    </tr>
+    {% else %}
+    <tr><td>Not available. Click Train models.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<div class="card">
+  <b>Outlier detection (IQR rule)</b>
+  <p class="note">
+    A value is an outlier if it is below Q1 − 1.5 × IQR or above Q3 + 1.5 × IQR. Outliers are
+    capped at those limits before training. Columns with no spread have no limits.
+  </p>
+  <table>
+    <tr><th>Numeric column</th><th>Outliers</th><th>% of students</th><th>Lower limit</th><th>Upper limit</th></tr>
+    {% for o in outlier_rows %}
+    <tr>
+      <td>{{ o.feature }}</td>
+      <td>{{ o.count }}</td>
+      <td>{{ o.pct }}%</td>
+      <td>{{ o.low if o.low is not none else '—' }}</td>
+      <td>{{ o.high if o.high is not none else '—' }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">Not available. Click Train models.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+
+<script>
+const btn = document.getElementById("trainBtn");
+if (btn) {
+  btn.addEventListener("click", async () => {
+    const status = document.getElementById("status");
+    btn.disabled = true;
+    status.textContent = "Training 5 models and running 5-fold cross-validation. This takes 2 to 4 minutes, please keep this page open...";
+    try {
+      const res = await fetch("/training/run", { method: "POST" });
+      const d = await res.json();
+      if (d.ok) {
+        window.location.reload();
+      } else {
+        status.textContent = "Training failed: " + d.error;
+        btn.disabled = false;
+      }
+    } catch (e) {
+      status.textContent = "Training failed: " + e;
+      btn.disabled = false;
+    }
+  });
+}
+</script>
+{% endblock %}

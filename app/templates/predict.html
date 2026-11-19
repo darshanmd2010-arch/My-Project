@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Predict Student{% endblock %}
+
+{% block content %}
+<h1>Predict a Student</h1>
+
+{% if not ready %}
+<div class="flash error">No trained model found. Go to <b>Model Training</b> and click <b>Train models</b> first.</div>
+{% else %}
+
+{% if weak %}
+<div class="flash error">
+  The model's ROC-AUC is {{ '%.3f'|format(best.roc_auc) }}, close to chance (0.50).
+  Treat these predictions as a demonstration of the system, not as reliable results.
+</div>
+{% endif %}
+
+<form method="get" class="card">
+  <b>Load an existing student</b>
+  <div class="row">
+    <label style="flex:1">Student ID
+      <input type="text" name="student_id" value="{{ student_id }}" placeholder="for example STU00001">
+    </label>
+    <button class="btn" type="submit" style="align-self:flex-end">Load</button>
+  </div>
+</form>
+
+<div class="row">
+  <form method="post" class="card" style="flex:2">
+    <input type="hidden" name="student_id" value="{{ student_id }}">
+    <b>Student details</b>
+    <div class="fields">
+      {% for f in spec %}
+      <label>{{ f.label }}
+        {% if f.kind == 'select' %}
+        <select name="{{ f.name }}">
+          {% for o in f.options %}
+          <option value="{{ o }}" {{ 'selected' if values[f.name]|string == o|string }}>{{ o }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="number" step="any" name="{{ f.name }}" value="{{ values[f.name] }}" required>
+        {% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    <button class="btn" type="submit">Predict</button>
+  </form>
+
+  <div class="card result-card">
+    <b>Result</b>
+    {% if result %}
+      <div class="k">{{ '%.1f'|format(result.probability * 100) }}%</div>
+      <p>chance of continuing to higher education</p>
+      <span class="{{ 'tag' if result.risk == 'High' else 'ok' }}" style="width:fit-content">
+        {{ result.risk }} risk of not continuing
+      </span>
+      <p class="note">Model used: {{ result.model }}</p>
+
+      <b>Main factors (XGBoost, SHAP-style)</b>
+      {% for f in result.factors %}
+      <p>{{ f.feature }}: <b>{{ f.direction }}</b> the chance of continuing ({{ f.effect }})</p>
+      {% else %}
+      <p class="note">Factor explanation is not available.</p>
+      {% endfor %}
+
+      <b>LIME explanation ({{ result.model }})</b>
+      {% for l in result.lime %}
+      <p>{{ l.label }}: <b>{{ l.direction }}</b> the chance ({{ l.weight }})</p>
+      {% else %}
+      <p class="note">LIME explanation is not available. Click Train models again on the Model Training page.</p>
+      {% endfor %}
+
+      <p class="note">Risk levels: High below 40%, Medium 40–60%, Low above 60% chance of continuing.</p>
+    {% else %}
+      <p>Fill in or load a student, then click <b>Predict</b>.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

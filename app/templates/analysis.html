@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% block title %}Data Analysis{% endblock %}
+
+{% block content %}
+<h1>Exploratory Data Analysis</h1>
+
+<div class="row">
+  <div class="card"><p>Students</p><div class="k">{{ total }}</div></div>
+  <div class="card"><p>Continue to higher education</p><div class="k">{{ yes }}</div><p>{{ rate_yes }}%</p></div>
+  <div class="card"><p>Do not continue</p><div class="k">{{ no }}</div><p>{{ rate_no }}%</p></div>
+</div>
+
+{% if total == 0 %}
+<div class="flash error">No data yet. Upload a CSV file on the Upload Data page first.</div>
+{% else %}
+
+<div class="card">
+  <label>Variable
+    <select id="feature">
+      {% for value, label in features %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="chart-box"><canvas id="featureChart"></canvas></div>
+  <p id="chiText" class="note"></p>
+</div>
+
+<div class="row">
+  <div class="card">
+    <b>Correlation with continuing (numeric variables)</b>
+    <p class="note">Blue = more likely to continue, orange = less likely.</p>
+    <div class="chart-box"><canvas id="corrChart"></canvas></div>
+  </div>
+  <div class="card">
+    <b>Feature importance (Random Forest)</b>
+    <p id="impNote" class="note">Calculating, this takes a few seconds...</p>
+    <div class="chart-box"><canvas id="impChart"></canvas></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script>
+const charts = {};
+
+function draw(id, config) {
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(document.getElementById(id), config);
+}
+
+function fmtP(p) {
+  return p < 0.001 ? "< 0.001" : p.toFixed(3);
+}
+
+async function loadFeature() {
+  const name = document.getElementById("feature").value;
+  const res = await fetch("/analysis/feature?name=" + encodeURIComponent(name));
+  const d = await res.json();
+  const text = document.getElementById("chiText");
+  if (d.error) { text.textContent = d.error; return; }
+
+  draw("featureChart", {
+    type: "bar",
+    data: {
+      labels: d.labels,
+      datasets: [{ label: "% continuing to higher education", data: d.rates, backgroundColor: "#2563EB" }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: "% continuing" } } },
+      plugins: { tooltip: { callbacks: { afterLabel: (c) => "Students: " + d.counts[c.dataIndex] } } }
+    }
+  });
+
+  if (d.p === null) {
+    text.textContent = "Chi-Square test is not available for this variable.";
+  } else {
+    const sig = d.p < 0.05 ? "a significant relationship" : "no significant relationship";
+    text.textContent = "Chi-Square = " + d.chi2.toFixed(2) + ", df = " + d.dof +
+      ", p = " + fmtP(d.p) + ", Cramér's V = " + d.cramers_v.toFixed(3) +
+      ". At the 5% level there is " + sig + " between " + d.title + " and continuing to higher education.";
+  }
+}
+
+async function loadCorrelation() {
+  const d = await (await fetch("/analysis/correlation")).json();
+  draw("corrChart", {
+    type: "bar",
+    data: {
+      labels: d.map(x => x.feature),
+      datasets: [{ label: "Correlation (r)", data: d.map(x => x.r), backgroundColor: d.map(x => x.r >= 0 ? "#2563EB" : "#C2410C") }]
+    },
+    options: { indexAxis: "y", maintainAspectRatio: false, scales: { y: { ticks: { autoSkip: false } } }, plugins: { legend: { display: false } } }
+  });
+}
+
+async function loadImportance() {
+  const d = await (await fetch("/analysis/importance")).json();
+  document.getElementById("impNote").textContent =
+    "Longer bars mean the model relies more on that variable. Dropout Status is left out of the inputs.";
+  draw("impChart", {
+    type: "bar",
+    data: {
+      labels: d.map(x => x.feature),
+      datasets: [{ label: "Importance", data: d.map(x => x.importance), backgroundColor: "#2563EB" }]
+    },
+    options: { indexAxis: "y", maintainAspectRatio: false, scales: { y: { ticks: { autoSkip: false } } }, plugins: { legend: { display: false } } }
+  });
+}
+
+document.getElementById("feature").addEventListener("change", loadFeature);
+loadFeature();
+loadCorrelation();
+loadImportance();
+</script>
+{% endif %}
+{% endblock %}

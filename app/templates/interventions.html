@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Interventions{% endblock %}
+
+{% block content %}
+<h1>At-Risk Students and Interventions</h1>
+
+<div class="row">
+  <div class="card"><p>At-risk students</p><div class="k">{{ at_risk }}</div></div>
+  <div class="card"><p>Pending recommendations</p><div class="k">{{ pending }}</div></div>
+  <div class="card"><p>Done</p><div class="k">{{ done }}</div></div>
+</div>
+
+<div class="card">
+  <b>How recommendations are made</b>
+  <p class="note">
+    Every student is scored by the best model. A student is at risk when the predicted chance
+    of continuing to higher education is below {{ threshold }}%. Rules then check financial,
+    academic, family, motivation and support barriers and attach a recommended action.
+  </p>
+  <form method="post" action="/interventions/generate">
+    <button class="btn" type="submit">Generate recommendations</button>
+  </form>
+</div>
+
+<form method="get" class="card">
+  <div class="filters">
+    <label>Barrier
+      <select name="barrier">
+        <option value="">All</option>
+        {% for b in barriers %}
+        <option value="{{ b }}" {{ 'selected' if b == barrier }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        <option value="">All</option>
+        <option value="Pending" {{ 'selected' if status == 'Pending' }}>Pending</option>
+        <option value="Done" {{ 'selected' if status == 'Done' }}>Done</option>
+      </select>
+    </label>
+    <button class="btn" type="submit">Filter</button>
+    <a class="btn2" href="/interventions/export">Export report (CSV)</a>
+  </div>
+</form>
+
+<div class="card">
+  <b>Recommendations ({{ matching }} matching{% if matching > 100 %}, showing the first 100{% endif %})</b>
+  <table>
+    <tr>
+      <th>Student</th><th>Chance of continuing</th><th>Risk</th>
+      <th>Barrier</th><th>Recommended intervention</th><th>Status</th><th></th>
+    </tr>
+    {% for r in rows %}
+    {% set p = risk.get(r.student_id) %}
+    <tr>
+      <td>{{ r.student_id }}</td>
+      <td>{% if p %}{{ '%.1f'|format(p.probability_continue * 100) }}%{% endif %}</td>
+      <td>{% if p %}<span class="{{ 'tag' if p.risk_level == 'High' else 'ok' }}">{{ p.risk_level }}</span>{% endif %}</td>
+      <td>{{ r.barrier }}</td>
+      <td>{{ r.recommendation }}</td>
+      <td>{{ r.status }}</td>
+      <td>
+        <form method="post" action="/interventions/{{ r.id }}/toggle">
+          <button class="btn2" type="submit">{{ 'Reopen' if r.status == 'Done' else 'Mark done' }}</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">No recommendations yet. Click <b>Generate recommendations</b>.</td></tr>
+    {% endfor %}
+  </table>
+</div>
+{% endblock %}
